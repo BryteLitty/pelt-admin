@@ -4,12 +4,14 @@ import { Button } from '@/core/components/ui/button'
 import { Input } from '@/core/components/ui/input'
 import { Label } from '@/core/components/ui/label'
 import { useTheme } from '@/core/context/theme-context'
-import { useLoginMutation, useAppDispatch, setCredentials } from '@/core/store'
+import { useLoginMutation, useVerifyLoginMFAMutation, useAppDispatch, setCredentials } from '@/core/store'
 import { useSimpleToast } from '@/core/hooks/useSimpleToast'
 import { hasAuthorizedRole } from '@/core/utils/auth'
 import { loginSchema, type LoginFormData } from '../types'
 import { CryptoIllustration } from './CryptoIllustration'
+import { MFAVerification } from './MFAVerification'
 import { Eye, EyeOff } from 'lucide-react'
+import type { User } from '@/core/store/api/authApi'
 
 import logoTextDark from '@/assets/brand/logo-text-dark.png'
 import logoTextWhite from '@/assets/brand/logo-text-white.png'
@@ -20,9 +22,13 @@ export function Login() {
   const location = useLocation()
   const dispatch = useAppDispatch()
   const [login, { isLoading }] = useLoginMutation()
+  const [verifyLoginMFA, { isLoading: isMfaLoading }] = useVerifyLoginMFAMutation()
   const toast = useSimpleToast()
   const [showSessionExpired, setShowSessionExpired] = useState(false)
-  
+  const [showMfaVerification, setShowMfaVerification] = useState(false)
+  const [pendingUser, setPendingUser] = useState<User | null>(null)
+  const [mfaError, setMfaError] = useState<string | undefined>()
+
   // Get the intended destination or default to dashboard
   const from = location.state?.from?.pathname || '/dashboard'
 
@@ -36,7 +42,7 @@ export function Login() {
       return () => clearTimeout(timer)
     }
   }, [location.state])
-  
+
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
     password: '',
@@ -46,7 +52,7 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     const result = loginSchema.safeParse(formData)
     if (!result.success) {
       const fieldErrors: Partial<LoginFormData> = {}
@@ -58,11 +64,19 @@ export function Login() {
       setErrors(fieldErrors)
       return
     }
-    
+
     setErrors({})
-    
+
     try {
       const response = await login(formData).unwrap()
+
+      // Check if MFA is required
+      if (response.mfaRequired) {
+        console.log('🔐 MFA verification required')
+        setPendingUser(response.user)
+        setShowMfaVerification(true)
+        return
+      }
 
       // Debug user roles
       console.log('👤 Login successful! User data:', {
@@ -86,7 +100,7 @@ export function Login() {
 
       dispatch(setCredentials({
         user: response.user,
-        token: response.accessToken
+        token: response.accessToken!
       }))
       toast.success(`Signed in as ${response.user.email}`, {
         title: 'Welcome back!',
@@ -98,10 +112,57 @@ export function Login() {
       toast.error(errorMessage, {
         title: 'Login Failed',
       })
-      setErrors({ 
+      setErrors({
         email: errorMessage
       })
     }
+  }
+
+  const handleMfaVerify = async (code: string) => {
+    if (!pendingUser) return
+
+    setMfaError(undefined)
+
+    try {
+      const response = await verifyLoginMFA({
+        email: pendingUser.email,
+        token: code
+      }).unwrap()
+
+      // Check if user has authorized role
+      if (!hasAuthorizedRole(response.user)) {
+        console.error('❌ Authorization failed. User roles:', response.user.roles?.map(r => r.role.name) || [])
+        console.error('❌ Required roles:', ['SUPERADMIN', 'ADMIN', 'MEMBER'])
+        toast.error('Access denied. You do not have permission to access this application.', {
+          title: 'Unauthorized Access',
+        })
+        setShowMfaVerification(false)
+        setPendingUser(null)
+        setErrors({
+          email: 'Access denied. Contact your administrator for access.'
+        })
+        return
+      }
+
+      dispatch(setCredentials({
+        user: response.user,
+        token: response.accessToken
+      }))
+      toast.success(`Signed in as ${response.user.email}`, {
+        title: 'Welcome back!',
+      })
+      navigate(from, { replace: true })
+    } catch (error: unknown) {
+      console.error('MFA verification error:', error)
+      const errorMessage = (error as { data?: { message?: string } })?.data?.message || 'Invalid verification code. Please try again.'
+      setMfaError(errorMessage)
+    }
+  }
+
+  const handleMfaBack = () => {
+    setShowMfaVerification(false)
+    setPendingUser(null)
+    setMfaError(undefined)
   }
 
   const handleChange = (field: keyof LoginFormData) => (
@@ -111,6 +172,19 @@ export function Login() {
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }))
     }
+  }
+
+  // Show MFA verification screen if required
+  if (showMfaVerification && pendingUser) {
+    return (
+      <MFAVerification
+        email={pendingUser.email}
+        onVerify={handleMfaVerify}
+        onBack={handleMfaBack}
+        isLoading={isMfaLoading}
+        error={mfaError}
+      />
+    )
   }
 
   return (

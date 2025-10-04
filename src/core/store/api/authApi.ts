@@ -44,7 +44,8 @@ interface User {
 
 export interface LoginResponse {
   user: User
-  accessToken: string
+  accessToken?: string
+  mfaRequired?: boolean
 }
 
 export interface ForgotPasswordRequest {
@@ -124,6 +125,18 @@ export interface VerifyMFARequest {
 
 export interface VerifyMFAResponse {
   success: boolean
+  user?: User
+  accessToken?: string
+}
+
+export interface VerifyLoginMFARequest {
+  email: string
+  token: string
+}
+
+export interface VerifyLoginMFAResponse {
+  user: User
+  accessToken: string
 }
 
 export interface VerifyBackupCodeRequest {
@@ -294,6 +307,13 @@ export const authApi = createApi({
         body: data,
       }),
     }),
+    verifyLoginMFA: builder.mutation<VerifyLoginMFAResponse, VerifyLoginMFARequest>({
+      query: (data) => ({
+        url: '/auth/verify-login-mfa',
+        method: 'POST',
+        body: data,
+      }),
+    }),
     verifyBackupCode: builder.mutation<VerifyBackupCodeResponse, VerifyBackupCodeRequest>({
       query: (data) => ({
         url: '/mfa/verify-backup',
@@ -330,6 +350,7 @@ export const {
   useSetupMFAMutation,
   useVerifyMFASetupMutation,
   useVerifyMFAMutation,
+  useVerifyLoginMFAMutation,
   useVerifyBackupCodeMutation,
   useRegenerateBackupCodesMutation,
   useDisableMFAMutation,

@@ -14,6 +14,7 @@ export {
   useCompletePasswordResetMutation,
   useChangePasswordMutation,
   useVerifyOTPMutation,
+  useVerifyLoginMFAMutation,
   useGetProfileQuery,
   useRefreshTokenMutation,
   useLogoutMutation,

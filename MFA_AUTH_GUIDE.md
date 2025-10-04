@@ -3,6 +3,8 @@
 ## Table of Contents
 - [Overview](#overview)
 - [API Reference](#api-reference)
+- [MFA Login Flow](#-mfa-login-flow)
+- [MFA Management Endpoints](#mfa-management-endpoints)
 - [Frontend Integration](#frontend-integration)
 - [Mobile Integration](#mobile-integration)
 - [Security Best Practices](#security-best-practices)
@@ -15,11 +17,17 @@
 The Bitspenda Core Backend provides a complete Multi-Factor Authentication (MFA) system using Time-based One-Time Passwords (TOTP). This guide covers everything you need to integrate MFA into your frontend applications.
 
 ### 🎯 **What's Included:**
+- **Login MFA Verification**: Two-step login process for users with MFA enabled
 - **TOTP Authentication**: Compatible with Google Authenticator, Authy, etc.
 - **QR Code Setup**: Automatic QR code generation for easy setup
 - **Backup Codes**: 10 single-use recovery codes
 - **Email Notifications**: Automatic notifications for all MFA events
 - **Encrypted Storage**: Secure storage of MFA secrets
+
+### 🔑 **Key Features:**
+- **Seamless Login Flow**: When MFA is enabled, users verify with a 6-digit code after password authentication
+- **No Token on MFA Required**: Access tokens are only issued after successful MFA verification
+- **Secure Token Management**: Tokens are properly scoped to prevent unauthorized access
 
 ### 🔧 **Supported MFA Types:**
 - `TOTP` - Time-based One-Time Password (Primary)
@@ -32,14 +40,484 @@ The Bitspenda Core Backend provides a complete Multi-Factor Authentication (MFA)
 
 ### Base URL
 ```
-https://your-api-domain.com/api/v1/mfa
+https://your-api-domain.com/api/v1
 ```
 
 ### Authentication
-All MFA endpoints require JWT authentication:
+Most MFA endpoints require JWT authentication (except login MFA verification):
 ```http
 Authorization: Bearer <access_token>
 ```
+
+---
+
+## 🔐 MFA Login Flow
+
+When a user has MFA enabled, the login process requires an additional verification step.
+
+### Login with MFA Enabled
+
+**Step 1: Initial Login**
+
+**Endpoint:** `POST /auth/login`
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "userPassword123"
+}
+```
+
+**Response (MFA Enabled):**
+```json
+{
+  "user": {
+    "id": "user-id",
+    "email": "user@example.com",
+    "mfaEnabled": true,
+    // ... other user fields (no tokens!)
+  },
+  "mfaRequired": true
+}
+```
+
+**Response (MFA Disabled):**
+```json
+{
+  "user": {
+    "id": "user-id",
+    "email": "user@example.com",
+    "mfaEnabled": false,
+    // ... other user fields
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Step 2: Verify MFA Code**
+
+**Endpoint:** `POST /auth/verify-login-mfa`
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "token": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "user": {
+    "id": "user-id",
+    "email": "user@example.com",
+    // ... other user fields
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Implementation Example
+
+```javascript
+const login = async (email, password) => {
+  try {
+    const response = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await response.json();
+
+    // Check if MFA is required
+    if (data.mfaRequired) {
+      // Store email temporarily for MFA verification
+      sessionStorage.setItem('mfa_email', email);
+
+      // Redirect to MFA verification page
+      return { requiresMfa: true, user: data.user };
+    }
+
+    // No MFA required, proceed with login
+    localStorage.setItem('accessToken', data.accessToken);
+    return { requiresMfa: false, user: data.user };
+
+  } catch (error) {
+    console.error('Login failed:', error);
+    throw error;
+  }
+};
+
+const verifyLoginMfa = async (email, totpCode) => {
+  try {
+    const response = await fetch('/api/v1/auth/verify-login-mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        token: totpCode
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Invalid MFA code');
+    }
+
+    const data = await response.json();
+
+    // Store access token
+    localStorage.setItem('accessToken', data.accessToken);
+
+    // Clear temporary email storage
+    sessionStorage.removeItem('mfa_email');
+
+    return { success: true, user: data.user };
+
+  } catch (error) {
+    console.error('MFA verification failed:', error);
+    throw error;
+  }
+};
+```
+
+### React Login Flow Example
+
+```jsx
+import React, { useState } from 'react';
+
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      const response = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (data.mfaRequired) {
+        // Show MFA input
+        setMfaRequired(true);
+      } else {
+        // Login successful
+        localStorage.setItem('accessToken', data.accessToken);
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      setError('Invalid credentials');
+    }
+  };
+
+  const handleMfaVerification = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      const response = await fetch('/api/v1/auth/verify-login-mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token: mfaCode })
+      });
+
+      if (!response.ok) {
+        throw new Error('Invalid MFA code');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('accessToken', data.accessToken);
+      window.location.href = '/dashboard';
+    } catch (err) {
+      setError('Invalid MFA code. Please try again.');
+    }
+  };
+
+  if (mfaRequired) {
+    return (
+      <div className="mfa-verification">
+        <h2>Two-Factor Authentication</h2>
+        <p>Enter the 6-digit code from your authenticator app</p>
+
+        <form onSubmit={handleMfaVerification}>
+          <input
+            type="text"
+            value={mfaCode}
+            onChange={(e) => setMfaCode(e.target.value)}
+            placeholder="000000"
+            maxLength={6}
+            pattern="[0-9]{6}"
+            required
+          />
+          {error && <p className="error">{error}</p>}
+          <button type="submit">Verify</button>
+          <button type="button" onClick={() => setMfaRequired(false)}>
+            Back to Login
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="login-form">
+      <h2>Login</h2>
+      <form onSubmit={handleLogin}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          required
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          required
+        />
+        {error && <p className="error">{error}</p>}
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  );
+};
+
+export default LoginPage;
+```
+
+### Vue.js Login Flow Example
+
+```vue
+<template>
+  <div class="login-container">
+    <div v-if="!mfaRequired" class="login-form">
+      <h2>Login</h2>
+      <form @submit.prevent="handleLogin">
+        <input
+          v-model="email"
+          type="email"
+          placeholder="Email"
+          required
+        />
+        <input
+          v-model="password"
+          type="password"
+          placeholder="Password"
+          required
+        />
+        <p v-if="error" class="error">{{ error }}</p>
+        <button type="submit">Login</button>
+      </form>
+    </div>
+
+    <div v-else class="mfa-verification">
+      <h2>Two-Factor Authentication</h2>
+      <p>Enter the 6-digit code from your authenticator app</p>
+      <form @submit.prevent="handleMfaVerification">
+        <input
+          v-model="mfaCode"
+          type="text"
+          placeholder="000000"
+          maxlength="6"
+          pattern="[0-9]{6}"
+          required
+        />
+        <p v-if="error" class="error">{{ error }}</p>
+        <button type="submit">Verify</button>
+        <button type="button" @click="mfaRequired = false">Back to Login</button>
+      </form>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      email: '',
+      password: '',
+      mfaRequired: false,
+      mfaCode: '',
+      error: ''
+    };
+  },
+  methods: {
+    async handleLogin() {
+      this.error = '';
+
+      try {
+        const response = await this.$http.post('/api/v1/auth/login', {
+          email: this.email,
+          password: this.password
+        });
+
+        if (response.data.mfaRequired) {
+          this.mfaRequired = true;
+        } else {
+          localStorage.setItem('accessToken', response.data.accessToken);
+          this.$router.push('/dashboard');
+        }
+      } catch (err) {
+        this.error = 'Invalid credentials';
+      }
+    },
+
+    async handleMfaVerification() {
+      this.error = '';
+
+      try {
+        const response = await this.$http.post('/api/v1/auth/verify-login-mfa', {
+          email: this.email,
+          token: this.mfaCode
+        });
+
+        localStorage.setItem('accessToken', response.data.accessToken);
+        this.$router.push('/dashboard');
+      } catch (err) {
+        this.error = 'Invalid MFA code. Please try again.';
+      }
+    }
+  }
+};
+</script>
+```
+
+### React Native Login Flow Example
+
+```jsx
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      const response = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (data.mfaRequired) {
+        setMfaRequired(true);
+      } else {
+        await AsyncStorage.setItem('accessToken', data.accessToken);
+        navigation.navigate('Dashboard');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Invalid credentials');
+    }
+  };
+
+  const handleMfaVerification = async () => {
+    try {
+      const response = await fetch('/api/v1/auth/verify-login-mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token: mfaCode })
+      });
+
+      if (!response.ok) {
+        throw new Error('Invalid MFA code');
+      }
+
+      const data = await response.json();
+      await AsyncStorage.setItem('accessToken', data.accessToken);
+      navigation.navigate('Dashboard');
+    } catch (error) {
+      Alert.alert('Error', 'Invalid MFA code. Please try again.');
+    }
+  };
+
+  if (mfaRequired) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Two-Factor Authentication</Text>
+        <Text style={styles.subtitle}>Enter 6-digit code from your app</Text>
+
+        <TextInput
+          style={styles.input}
+          value={mfaCode}
+          onChangeText={setMfaCode}
+          placeholder="000000"
+          keyboardType="numeric"
+          maxLength={6}
+        />
+
+        <TouchableOpacity style={styles.button} onPress={handleMfaVerification}>
+          <Text style={styles.buttonText}>Verify</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => setMfaRequired(false)}>
+          <Text style={styles.linkText}>Back to Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Login</Text>
+
+      <TextInput
+        style={styles.input}
+        value={email}
+        onChangeText={setEmail}
+        placeholder="Email"
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <TextInput
+        style={styles.input}
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Password"
+        secureTextEntry
+      />
+
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+        <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const styles = {
+  container: { flex: 1, padding: 20, justifyContent: 'center' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
+  subtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 15, borderRadius: 5 },
+  button: { backgroundColor: '#007bff', padding: 15, borderRadius: 5, marginBottom: 10 },
+  buttonText: { color: 'white', textAlign: 'center', fontWeight: 'bold' },
+  linkText: { color: '#007bff', textAlign: 'center', marginTop: 10 }
+};
+
+export default LoginScreen;
+```
+
+---
+
+## MFA Management Endpoints
 
 ### 1. Setup MFA
 
