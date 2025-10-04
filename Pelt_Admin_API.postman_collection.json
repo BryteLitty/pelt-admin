@@ -1,0 +1,433 @@
+{
+  "info": {
+    "name": "Pelt Admin API Collection",
+    "description": "Complete API collection for the Pelt Admin dashboard with authentication and user management endpoints",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set auth token from login response",
+          "if (pm.info.requestName !== 'Login' && !pm.request.headers.has('Authorization')) {",
+          "  const token = pm.collectionVariables.get('authToken');",
+          "  if (token) {",
+          "    pm.request.headers.add({",
+          "      key: 'Authorization',",
+          "      value: `Bearer ${token}`",
+          "    });",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testEmail",
+      "value": "admin@pelt.com",
+      "type": "string"
+    },
+    {
+      "key": "testPassword",
+      "value": "admin123",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const response = pm.response.json();",
+                  "  pm.collectionVariables.set('authToken', response.accessToken);",
+                  "  pm.test('Login successful', () => {",
+                  "    pm.expect(response.user).to.have.property('email');",
+                  "    pm.expect(response.accessToken).to.be.a('string');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Login failed', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 401, 422]);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Request Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/request-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "request-password-reset"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"code\": \"123456\",\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Complete Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/complete-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "complete-password-reset"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{testPassword}}\",\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Get Admin Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/admin-users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "admin-users"]
+            }
+          }
+        },
+        {
+          "name": "Get General Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/general-users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "general-users"]
+            }
+          }
+        },
+        {
+          "name": "Create Admin User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newadmin@pelt.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"Admin\",\n  \"password\": \"password123\",\n  \"role\": \"ADMIN\",\n  \"department\": \"IT\",\n  \"jobTitle\": \"Administrator\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "staff"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":userId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user-id-here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUSPENDED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":userId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user-id-here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":userId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user-id-here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Role Management",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["roles"]
+            }
+          }
+        },
+        {
+          "name": "Assign Role to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-id-here\",\n  \"roleId\": \"role-id-here\",\n  \"assignedBy\": \"current-user-id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/roles/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["roles", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Remove Role from User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/remove/:userId/:roleId",
+              "host": ["{{baseUrl}}"],
+              "path": ["roles", "remove", ":userId", ":roleId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user-id-here"
+                },
+                {
+                  "key": "roleId",
+                  "value": "role-id-here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
