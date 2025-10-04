@@ -22,6 +22,7 @@ export {
 
 // Re-export types
 export type {
+  User,
   LoginRequest,
   LoginResponse,
   RequestPasswordResetRequest,

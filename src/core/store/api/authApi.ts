@@ -24,7 +24,7 @@ interface Role {
   }
 }
 
-interface User {
+export interface User {
   id: string
   email: string
   firstName: string | null

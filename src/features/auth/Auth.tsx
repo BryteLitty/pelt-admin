@@ -18,6 +18,20 @@ export function Auth() {
     try {
       const result = await login(data).unwrap()
 
+      // Check if MFA is required
+      if (result.mfaRequired) {
+        toastInfo('MFA verification required. Please check the login page.')
+        setIsLoading(false)
+        return
+      }
+
+      // Ensure we have an access token before proceeding
+      if (!result.accessToken) {
+        toastError('Login failed. No access token received.')
+        setIsLoading(false)
+        return
+      }
+
       // Store credentials in Redux store (this also saves to localStorage)
       dispatch(setCredentials({
         user: result.user,
